@@ -121,6 +121,16 @@ $ cat site.yml
 - import_playbook: configure.yml
 ```
 
+#### handlers最佳实践
+* handler是inactive tasks
+* handler需通过notify激活
+* handler有全局唯一的名字
+* handler通常情况下在active tasks执行完后执行
+* handler如未被notify则不会执行
+* handler如被notify将在play里的active tasks执行完后最后执行1次
+* task meta: flush_handlers将触发handler立即执行
+
+
 
 ### Memo
 |hostname|ipaddr|

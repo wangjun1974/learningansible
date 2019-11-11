@@ -17,6 +17,24 @@ block
 rescue
 always
 
+### Ansible Playbook最佳实践
+使用可读性强的名称构建inventory
+```
+Poor                       Better
+10.1.2.75                   db1 ansible_host=10.1.2.75
+10.1.5.45                   db2 ansible_host=10.1.5.45
+
+w14301.acme.com             web1 ansible_host=w14301.acme.com
+w17802.acme.com             web2 ansible_host=w17802.acme.com
+```
+
+
+
+
+
+
+
+### Memo
 |hostname|ipaddr|
 |---|---|
 |test.example.com|192.168.0.1|

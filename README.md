@@ -129,8 +129,137 @@ $ cat site.yml
 * handler如未被notify则不会执行
 * handler如被notify将在play里的active tasks执行完后最后执行1次
 * task meta: flush_handlers将触发handler立即执行
+* handler可使用的模块与active task一样
+* 常用的handler的使用场景是重启机器和重启服务
 
+##### Handler的例子
+```
+tasks:
 
+  - name: Configure demo for apache httpd
+    template:
+      src: demo.example.conf.j2
+      dest: /etc/httpd/conf.d/demo.example.conf
+    notify:
+      - restart_apache
+
+handlers:
+
+  - name: restart_apache
+    service:
+      name: httpd
+      state: restarted
+```
+
+#### Blocks最佳实践
+* 在复杂playbook通常包含非常多tasks
+* 这些tasks里有些task具有相关性
+* 使用Block来把这些相关的tasks组织在一起
+* Block的好处包括：改善可读性和在Block级别改善性能
+
+#### Block错误处理的例子
+```
+tasks:
+  - name: Attempt and gracefully roll back demo
+    block:
+      - debug:
+          msg: "I execute normally"
+      - command: /bin/false
+      - debug:
+          msg: "I never execute, due to the above task failing"
+    rescue:
+      - debug:
+          msg: "I caught an error"
+      - command: /bin/false
+      - debug:
+          msg: "I also never execute :-("
+    always:
+      - debug:
+          msg: "this always executes"
+```
+* block的debug msg: "I execute normally"首先执行
+* block的command '/bin/false'执行完后，msg: "I never execute, due to the above task failing"不会被执行
+* 由于有rescue和always的存在，紧接着将执行debug msg: "I caught an error"
+* rescue的command '/bin/false'执行完后，msg: "I also never execute :-("不会执行
+* 周后会执行always的debug msg: "this always executes"
+
+#### Block与Handler处理
+```
+ tasks:
+
+   - name: Attempt and gracefull roll back demo
+     block:
+       - debug:
+           msg: "I execute normally"
+         notify: run me even after an error
+       - command: /bin/false
+     rescue:
+       - name: make sure all handlers run
+         meta: flush_handlers
+  handlers:
+    - name: run me even after an error
+      debug:
+        msg: "this handler runs even on error"
+```
+说明：
+* notify设置未来执行handler(inactive tasks)'run me even after an error'
+* command /bin/false导致block执行失败，此时如没有rescue或always则playbook在此终止
+* 因为有rescue的存在，继续执行meta: flush_handlers
+* meta: flush_handlers，触发handler 'run me even after an error'执行
+
+#### Roles最佳实践
+* 与playbook一样，为了实现易于维护，请保持roles的简洁性
+* 简化roles的依赖
+* 通过roles子目录保存项目内开发的roles
+* 用ansible-galaxy init开发可共享的roles
+* 使用ansible-galaxy安装roles
+* 使用roles的文件如requirements.yml定义项目的外部依赖的roles
+* 使用roles的特定版本
+
+##### 外部roles的例子
+```
+myapp/
+├── config.yml
+├── provision.yml
+├── roles
+│   └── requirements.yml
+└── setup.yml
+
+$ ansible-galaxy install -r requirements.yml
+
+$ cat requirements.yml
+
+# from galaxy
+- src: yatesr.timezone
+
+# from GitHub
+- src: https://github.com/bennojoy/nginx
+  version: v1.4
+
+# from a webserver, where the role is packaged in a tar.gz
+- src: https://some.webserver.example.com/files/master.tar.gz
+  name: http-role
+```
+
+##### Roles的执行顺序
+* 默认roles在playbook的tasks之前执行
+* 可在pre_tasks处执行所有roles还未执行的tasks
+* 可在post_tasks处执行所有roles执行完之后的tasks
+
+不同阶段的tasks的执行顺序
+```
+---
+- hosts: remote.example.com
+  pre_tasks:
+    - shell: echo 'hello'
+  roles:
+    - role1
+    - role2
+  tasks:
+    - shell: echo 'still busy'
+  post_tasks:
+    - shell: echo 'goodbye'
+```
 
 ### Memo
 |hostname|ipaddr|

@@ -299,6 +299,20 @@ Decrypt: ansible-vault decrypt secret.yml
 https://www.digitalocean.com/community/tutorials/how-to-use-vault-to-protect-sensitive-ansible-data-on-ubuntu-16-04<br>
 https://schoolofdevops.github.io/ultimate-ansible-bootcamp/ansible-vault/
 
+##### 变量和变量名
+变量
+* Separate logic (tasks) from variables and reduce repetitive patterns
+
+变量名
+* Makes plays more readable and helps avoid variable name conflicts
+* Use descriptive, unique, human-meaningful names for variables
+* Prefix role variables with role names
+```
+haproxy_max_keepalive: 25
+haproxy_port: 80
+tomcat_port: 8080
+```
+
 
 ### Memo
 |hostname|ipaddr|

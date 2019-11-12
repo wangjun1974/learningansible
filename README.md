@@ -313,6 +313,435 @@ haproxy_port: 80
 tomcat_port: 8080
 ```
 
+### Day1 Labs - Best Practice Labs
+
+#### 浏览环境
+
+##### 列出全部主机
+```
+ansible all --list-hosts
+```
+
+##### 检查主机可ping通
+```
+ansible all -m ping
+```
+
+##### 检查app1可登陆
+```
+ssh app1.${GUID}.internal
+```
+#### 配置Cliet
+
+##### 创建Client环境
+```
+export GUID=`hostname | awk -F"." '{print $2}'`
+mkdir ~/.ssh
+sudo cp /root/.ssh/${GUID}key.pem ~/.ssh
+sudo chown `whoami` ~/.ssh/${GUID}key.pem
+sudo chmod 400 ~/.ssh/${GUID}key.pem
+sudo chmod 400 ~/.ssh/${GUID}key.pem
+```
+
+##### 检查实例可登陆
+```
+ssh -i ~/.ssh/${GUID}key.pem  ec2-user@app1.${GUID}.example.opentlc.com
+exit
+```
+##### 创建inventory
+```
+cp /etc/ansible/hosts ~/myinventory.file
+ansible -i myinventory.file all -m ping
+```
+
+#### 部署3层应用
+
+##### 克隆bad-repository
+```
+git clone https://github.com/wangjun1974/bad-ansible
+```
+
+##### 拷贝文件
+```
+cd bad-ansible
+cp /etc/yum.repos.d/open_three-tier-app.repo .
+```
+
+#### 执行bad-ansible playbook
+
+##### 执行playbook，不带变量
+```
+ansible-playbook main.yml
+```
+
+##### 执行playbook，设置变量
+```
+ansible-playbook main.yml -e "GUID=${GUID}"
+```
+
+##### 检查网址可访问
+```
+curl http://frontend1.${GUID}.example.opentlc.com
+```
+
+#### 清理环境
+```
+ansible-playbook cleanup.yml
+```
+
+#### 重构playbook
+
+
+##### 创建roles目录
+```
+mkdir -p roles/{ansible-roles-preconfig,ansible-roles-frontends,ansible-roles-apps,ansible-roles-db}
+for i in ansible-roles-preconfig ansible-roles-frontends ansible-roles-apps ansible-roles-db
+do
+  mkdir -p roles/$i/{tasks,handlers,files,defaults,templates}
+done
+```
+
+#### Roles - ansible-roles-preconfig
+
+##### 生成roles/ansible-roles-preconfig/files/open_three-tier-app.repo
+```
+cat > roles/ansible-roles-preconfig/files/open_three-tier-app.repo << EOF
+[rhel-7-server-rpms]
+name=Red Hat Enterprise Linux 7
+baseurl=http://admin.na.shared.opentlc.com/repos/ocp/3.6//rhel-7-server-rpms
+enabled=1
+gpgcheck=0
+
+[rhel-7-server-rh-common-rpms]
+name=Red Hat Enterprise Linux 7 Common
+baseurl=http://admin.na.shared.opentlc.com/repos/ocp/3.6//rhel-7-server-rh-common-rpms
+enabled=1
+gpgcheck=0
+
+[rhel-7-server-extras-rpms]
+name=Red Hat Enterprise Linux 7 Extras
+baseurl=http://admin.na.shared.opentlc.com/repos/ocp/3.6//rhel-7-server-extras-rpms
+enabled=1
+gpgcheck=0
+
+[rhel-7-server-optional-rpms]
+name=Red Hat Enterprise Linux 7 Optional
+baseurl=http://admin.na.shared.opentlc.com/repos/ocp/3.6//rhel-7-server-optional-rpms
+enabled=1
+gpgcheck=0
+
+[epel]
+name=Extra Packages for Enterprise Linux 7 - $basearch
+baseurl=http://download.fedoraproject.org/pub/epel/7/$basearch
+mirrorlist=http://mirrors.fedoraproject.org/metalink?repo=epel-7&arch=$basearch
+failovermethod=priority
+enabled=1
+gpgcheck=0
+#gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7
+EOF
+```
+
+##### 生成roles/ansible-roles-preconfig/tasks/mail.yml
+```
+cat > roles/ansible-roles-preconfig/tasks/mail.yml << EOF
+---
+- name: 'Enable repos'
+  copy:
+    src: open_three-tier-app.repo
+    dest: /etc/yum.repos.d
+    owner: root
+    group: root
+    mode: '0644'
+EOF
+```
+
+#### Roels - ansible-roles-frontends
+
+##### 生成roles/ansible-roles-frontends/templates/haproxy.cfg.j2
+```
+cat > roles/ansible-roles-frontends/templates/haproxy.cfg.j2 << 'EOF'
+global
+  log /dev/log  local0
+  log /dev/log  local1 notice
+  stats socket /var/lib/haproxy/stats level admin
+  chroot /var/lib/haproxy
+  user haproxy
+  group haproxy
+  daemon
+
+defaults
+  log global
+  mode  http
+  option  httplog
+  option  dontlognull
+        timeout connect 5000
+        timeout client 50000
+        timeout server 50000
+
+frontend hafrontend
+    bind *:80
+    mode http
+    default_backend app-servers
+
+backend app-servers
+    mode http
+    balance roundrobin
+    option forwardfor
+    server app1 app1.{{GUID}}.internal:8080 cookie app1 check
+    server app2 app2.{{GUID}}.internal:8080 cookie app2 check
+EOF
+```
+
+#### 生成roles/ansible-roles-frontends/handlers/main.yml
+```
+cat > roles/ansible-roles-frontends/handlers/main.yml << EOF
+  
+---
+- name: enable and start haproxy
+  systemd:
+    name: haproxy
+    enabled: yes
+    state: restarted
+    daemon_reload: yes
+  become: yes
+EOF
+```
+
+##### 生成roles/ansible-roles-frontends/tasks/main.yml
+```
+cat > roles/ansible-roles-frontends/tasks/main.yml << EOF
+---
+- name: 'Install packages'
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - httpie
+    - haproxy
+
+- name: 'Configure haproxy'
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: 0644
+  notify: enable and start haproxy
+
+- name: 'Start haproxy'
+  service:
+    name: haproxy
+    enabled: yes
+    state: started
+EOF    
+```
+
+#### Roles - ansible-roles-apps
+
+##### roles/ansible-roles-apps/files/index.html.app1
+```
+cat > roles/ansible-roles-apps/files/index.html.app1 << EOF  
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Ansible Deployed Tomcat</title>
+  <meta name="description" content="Ansible Created Content">
+  <meta name="tony.g.kay@gmail.com" content="Ansible">
+
+</head>
+
+<body>
+    <h1>Ansible has done its job - Welcome to Tomcat on App1</h1>
+</body>
+</html>
+EOF
+```
+
+##### roles/ansible-roles-apps/files/index.html.app2
+```
+cat > roles/ansible-roles-apps/files/index.html.app2 << EOF
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Ansible Deployed Tomcat</title>
+  <meta name="description" content="Ansible Created Content">
+  <meta name="tony.g.kay@gmail.com" content="Ansible">
+
+</head>
+
+<body>
+    <h1>Ansible has done its job - Welcome to Tomcat on App2</h1>
+</body>
+</html>
+EOF
+```
+
+##### roles/ansible-roles-apps/handlers/main.yml
+```
+cat > << EOF
+---
+- name: enable and start tomcat and httpd
+  systemd:
+    name: "{{ item }}"
+    enabled: yes
+    state: restarted
+    daemon_reload: yes
+  with_items:
+    - tomcat
+    - httpd
+  become: yes
+EOF
+```
+
+##### roles/ansible-roles-apps/tasks/main.yml
+```
+cat > roles/ansible-roles-apps/tasks/main.yml << EOF
+---
+- name: 'Install tomcat'
+  yum:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - tomcat
+    - httpd
+
+- name: 'Create tomcat directory'
+  file:
+    path: /usr/share/tomcat/webapps/ROOT
+    state: directory
+
+- name: 'Copy template index.html.j2 to tomcat'
+  template:
+    src: index.html.j2
+    dest: /usr/share/tomcat/webapps/ROOT/index.html
+    mode: 0644
+  notify: enable and start tomcat and httpd
+EOF
+```
+
+#### Roles - ansible-roles-db
+
+##### roles/ansible-roles-db/handlers/main.yml
+```
+cat > roles/ansible-roles-db/handlers/main.yml << EOF
+---
+- name: enable and start postgres
+  systemd:
+    name: postgresql
+    enabled: yes
+    state: restarted
+    daemon_reload: yes
+  become: yes
+EOF
+```
+
+##### roles/ansible-roles-db/tasks/main.yml
+```
+cat > roles/ansible-roles-db/tasks/main.yml << EOF
+---
+- name: 'Install postgres'
+  yum:
+    name: ['postgresql-server']
+    state: latest
+
+- name: 'Check if data directory exist'
+  shell: ls /var/lib/pgsql/data
+  register: check_db_output
+  ignore_errors: yes
+  
+- name: 'Initialize postgres'
+  command: postgresql-setup initdb
+  when: check_db_output.rc != 0
+
+- name: 'Enable and start postgres'
+  debug: 
+    msg: "Enable and start postgres"
+  notify: enable and start postgres
+EOF
+```
+
+#### 创建playbook
+
+##### 创建playbook preconfig.yml 
+```
+cat > preconfig.yml  << EOF
+---
+- name: config repos
+  hosts: all
+  gather_facts: false # remove later! speeds up testing
+  become: true
+
+  roles:
+    - ansible-roles-preconfig 
+EOF
+```
+
+##### 创建playbook frontends.yml
+```
+cat > frontends.yml << EOF
+---
+- name: config frontends
+  hosts: frontends
+  gather_facts: false # remove later! speeds up testing
+  become: true
+
+  roles:
+    - ansible-roles-frontends
+EOF
+```
+
+##### 创建playbook apps.yml
+```
+cat > apps.yml << EOF
+---
+- name: config apps
+  hosts: apps
+  gather_facts: false # remove later! speeds up testing
+  become: true
+
+  roles:
+    - ansible-roles-apps
+EOF
+```
+
+##### 创建playbook db.yml
+```
+cat > db.yml << EOF
+---
+- name: config db
+  hosts: appdbs
+  gather_facts: false # remove later! speeds up testing
+  become: true
+
+  roles:
+    - ansible-roles-db
+EOF
+```
+
+##### 创建playbook site.yml
+```
+cat > site.yml << EOF
+---
+- import_playbook: preconfig.yml
+- import_playbook: frontends.yml
+- import_playbook: apps.yml
+- import_playbook: db.yml
+EOF
+```
+
+#### 执行playbook
+```
+ansible-playbook cleanup.yml
+ansible-playbook site.yml -e "GUID=${GUID}"
+```
+
+
 ## Day2
 
 ### Windows Integration
@@ -331,13 +760,13 @@ https://docs.ansible.com/ansible/2.5/user_guide/windows_setup.html
 最新的Windows Ansible Module
 http://docs.ansible.com/ansible/latest/list_of_windows_modules.html
 
-#### Labs
-安装ansible
+#### Day2 Labs - Windows Integration
+##### 安装ansible 
 ```
 yum install -y ansible
 ```
 
-生成ansible inventory文件
+##### 生成ansible inventory文件
 ```
 cat > /etc/ansible/hosts << EOF
 
@@ -382,7 +811,7 @@ ansible_become=false
 EOF
 ```
 
-检查
+##### 列出全部主机
 ```
 ansible all --list-hosts
   hosts (6):
@@ -394,17 +823,17 @@ ansible all --list-hosts
     support2.d7da.internal
 ```
 
-安装Ansible管理Windows所需软件包
+##### 安装Ansible管理Windows所需软件包
 ```
 yum install -y python-devel krb5-devel krb5-libs krb5-workstation python-pip gcc
 ```
 
-安装版本大于等于0.2.2的pywinrm
+##### 安装版本大于等于0.2.2的pywinrm
 ```
-pip install pywinrm==0.2.2
+pip install "pywinrm>=0.2.2"
 ```
 
-检查windows主机可访问
+##### 检查windows主机可访问
 ```
 ansible windows -m win_ping
 /usr/lib/python2.7/site-packages/urllib3/connectionpool.py:1004: InsecureRequestWarning: Unverified HTTPS request is being made. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
@@ -415,19 +844,19 @@ ad1.d7da.internal | SUCCESS => {
 }
 ```
 
-创建github项目，克隆项目
+##### 创建github项目，克隆项目
 ```
 git clone https://github.com/wangjun1974/windowsad.git
 cd windowsad
 ```
 
-创建目录
+##### 创建目录
 ```
 mkdir -p roles/win_ad_install/tasks
 mkdir -p roles/win_ad_install/defaults
 ```
 
-生成roles默认变量
+##### 生成roles默认变量roles/win_ad_install/defaults/main.yml
 ```
 cat > roles/win_ad_install/defaults/main.yml << EOF
 ---
@@ -438,7 +867,7 @@ ad_admin_password: "{{ansible_password}}"
 EOF
 ```
 
-生成roles/win_ad_install/tasks/main.yml
+##### 生成roles/win_ad_install/tasks/main.yml
 ```
 cat > roles/win_ad_install/tasks/main.yml << EOF
 - name: Install AD-Domain-Services feature
@@ -640,8 +1069,3 @@ kinit mickey@AD1.${GUID_CAP}.EXAMPLE.OPENTLC.COM
 ```
 ssh mickey@ad1.${GUID}.example.opentlc.com
 ```
-
-### Memo
-|hostname|ipaddr|
-|---|---|
-|test.example.com|192.168.0.1|

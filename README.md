@@ -9,6 +9,11 @@ Ansible Best Practise Style Guide
 可以参考<br>
 https://github.com/openshift/openshift-ansible/blob/master/docs/style_guide.adoc
 
+### Ansible playbooks and roles examples
+
+Red Hat Middleware Playbooks<br>
+https://github.com/redhat-cop/ansible-middleware-playbooks
+
 ### Day1
 
 ansible inventory

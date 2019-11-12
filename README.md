@@ -268,6 +268,36 @@ $ cat requirements.yml
     - shell: echo 'goodbye'
 ```
 
+##### Templates
+Templates可用于
+* 保存未知在templates目录下
+* 主要功能是变量替换
+* 基于条件设置变量
+* 简单条件判断
+* 简单循环迭代
+
+在使用Templates时需避免
+* 在Templates里定义/管理变量
+* 复杂条件
+* 基于主机名设置条件
+
+##### Ansible-Vault
+* 使用ansible-vault加密重要数据
+```
+Create: ansible-vault create secret.yml
+Encrypt: ansible-vault encrypt secret.yml
+View: ansible-vault view secret.yml
+Decrypt: ansible-vault decrypt secret.yml
+```
+
+* 运行使用ansible-vault加密的playbook时使用以下参数
+```
+--ask-vault-pass
+--vault-password-file
+```
+例子<br>
+https://www.digitalocean.com/community/tutorials/how-to-use-vault-to-protect-sensitive-ansible-data-on-ubuntu-16-04
+
 ### Memo
 |hostname|ipaddr|
 |---|---|

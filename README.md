@@ -551,7 +551,8 @@ EOF
 
 ##### 创建Playbook vars
 ```
-cat << EOF > ssh_var.yml
+cat << EOF > roles/win_service_config/defaults/main.yml
+---
 package_name: openssh
 parameters: /SSHServerFeature
 service_name: SSHD
@@ -564,8 +565,6 @@ EOF
 ```
 cat << EOF > win_ssh_server.yml
 - hosts: windows
-  vars_files:
-    - ./ssh_var.yml
   roles:
     - win_service_config
 EOF
@@ -579,7 +578,9 @@ ansible-playbook win_ssh_server.yml
 #### 创建Windows AD Users/Groups
 ##### 创建vars
 ```
+mkdir -p roles/win_ad_user/{tasks,defaults}
 cat << EOF > roles/win_ad_user/defaults/main.yml
+---
 # vars file for roles/win_ad_user
 user_info:
   - { name: 'james', firstname: 'James', surname: 'Jockey', password: 'redhat@123', group_name: 'dev', group_scope: 'domainlocal'}
@@ -589,9 +590,56 @@ user_info:
 EOF
 ```
 
-##### 创建
+##### 创建tasks
+```
+cat << EOF > roles/win_ad_user/tasks/main.yml
+---
+# tasks file for roles/win_ad_user
+- name: Create windows domain group
+  win_domain_group:
+    name: "{{ item.group_name }}"
+    scope: "{{ item.group_scope }}"
+    state: present
+  loop: "{{ user_info }}"
 
+- name: Create AD User
+  win_domain_user:
+    name: "{{ item.name }}"
+    firstname: "{{item.firstname }}"
+    surname: "{{ item.surname }}"
+    password: "{{ item.password }}"
+    groups: "{{ item.group_name }}"
+    state: present
+    email: '"{{ item.name }}"@ad1.${GUID}.example.opentlc.com'
+  loop: "{{ user_info }}"
+EOF
+```
 
+##### 创建Playbook
+```
+cat << EOF > ad_user_group_create.yml
+---
+- name: add active directory users
+  hosts: windows
+  roles:
+    - win_ad_user
+EOF
+```
+
+##### 执行Playbook
+```
+ansible-playbook ad_user_group_create.yml
+```
+
+##### 登陆mickey用户
+```
+kinit mickey@AD1.${GUID_CAP}.EXAMPLE.OPENTLC.COM
+```
+
+##### 确认SSH服务工作正常
+```
+ssh mickey@ad1.${GUID}.example.opentlc.com
+```
 
 ### Memo
 |hostname|ipaddr|

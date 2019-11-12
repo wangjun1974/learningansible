@@ -313,6 +313,285 @@ haproxy_port: 80
 tomcat_port: 8080
 ```
 
+## Day2
+
+### Windows Integration
+
+https://docs.ansible.com/ansible/latest/user_guide/windows_winrm.html
+https://docs.ansible.com/ansible/latest/user_guide/windows_setup.html
+https://digitalist.global/talks/winrmansible/
+https://www.unixarena.com/2019/04/ansible-configure-windows-servers-as-ansible-client-winrm.html/
+
+PowerShell脚本用来准备Windows主机
+https://github.com/ansible/ansible/blob/devel/examples/scripts/ConfigureRemotingForAnsible.ps1
+
+为Ansible准备Windows主机
+https://docs.ansible.com/ansible/2.5/user_guide/windows_setup.html
+
+最新的Windows Ansible Module
+http://docs.ansible.com/ansible/latest/list_of_windows_modules.html
+
+#### Labs
+安装ansible
+```
+yum install -y ansible
+```
+
+生成ansible inventory文件
+```
+cat > /etc/ansible/hosts << EOF
+
+[GenericExample:vars]
+
+###########################################################################
+### Ansible Vars
+###########################################################################
+timeout=60
+ansible_become=yes
+ansible_user=ec2-user
+
+
+[GenericExample:children]
+towers
+windows
+support
+
+[towers]
+## These are the towers
+tower1.d7da.internal public_host_name=tower1.d7da.example.opentlc.com ssh_host=tower1.d7da.internal
+tower2.d7da.internal public_host_name=tower2.d7da.example.opentlc.com ssh_host=tower2.d7da.internal
+tower3.d7da.internal public_host_name=tower3.d7da.example.opentlc.com ssh_host=tower3.d7da.internal
+
+
+[windows]
+## These are the activedirectory servers
+ad1.d7da.internal ssh_host=ad1.d7da.example.opentlc.com ansible_password=jVMijRwLbI02gFCo2xkjlZ9lxEA7bm7zgg==
+
+
+## These are the supporthosts
+[support]
+support1.d7da.internal ssh_host=support1.d7da.internal
+support2.d7da.internal ssh_host=support2.d7da.internal
+
+[windows:vars]
+ansible_connection=winrm
+ansible_user=Administrator
+ansible_winrm_server_cert_validation=ignore
+ansible_become=false
+
+EOF
+```
+
+检查
+```
+ansible all --list-hosts
+  hosts (6):
+    tower1.d7da.internal
+    tower2.d7da.internal
+    tower3.d7da.internal
+    ad1.d7da.internal
+    support1.d7da.internal
+    support2.d7da.internal
+```
+
+安装Ansible管理Windows所需软件包
+```
+yum install -y python-devel krb5-devel krb5-libs krb5-workstation python-pip gcc
+```
+
+安装版本大于等于0.2.2的pywinrm
+```
+pip install pywinrm==0.2.2
+```
+
+检查windows主机可访问
+```
+ansible windows -m win_ping
+/usr/lib/python2.7/site-packages/urllib3/connectionpool.py:1004: InsecureRequestWarning: Unverified HTTPS request is being made. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#ssl-warnings
+  InsecureRequestWarning,
+ad1.d7da.internal | SUCCESS => {
+    "changed": false, 
+    "ping": "pong"
+}
+```
+
+创建github项目，克隆项目
+```
+git clone https://github.com/wangjun1974/windowsad.git
+cd windowsad
+```
+
+创建目录
+```
+mkdir -p roles/win_ad_install/tasks
+mkdir -p roles/win_ad_install/defaults
+```
+
+生成roles默认变量
+```
+cat > roles/win_ad_install/defaults/main.yml << EOF
+---
+ad_domain_name: ad1.${GUID}.example.opentlc.com
+ad_safe_mode_password: "{{ansible_password}}"
+ad_admin_user: "admin@{{ad_domain_name}}"
+ad_admin_password: "{{ansible_password}}"
+EOF
+```
+
+生成roles/win_ad_install/tasks/main.yml
+```
+cat > roles/win_ad_install/tasks/main.yml << EOF
+- name: Install AD-Domain-Services feature
+  win_feature:
+    name: AD-Domain-Services
+    include_management_tools: yes
+    include_sub_features: yes
+
+- name: Setup Active Directory Controller
+  win_domain:
+    dns_domain_name: "{{ ad_domain_name }}"
+    safe_mode_password: "{{ ad_safe_mode_password }}"
+  register: active_directory_controllers
+
+- name: Reboot once DC created
+  win_reboot:
+  when: active_directory_controllers.reboot_required
+
+- name: List Domain Controllers in domain
+  win_shell: "nltest /dclist:{{ ad_domain_name }}"
+  register: domain_list
+
+- debug:
+   var: domain_list
+EOF
+```
+
+##### 创建playbook
+```
+cat << EOF > setup_ad.yml
+---
+- name: install and configure active directory
+  hosts: windows
+  gather_facts: false
+
+  roles:
+    - win_ad_install
+EOF
+```
+
+##### 执行playbook
+```
+ansible-playbook setup_ad.yml
+```
+
+#### Controller配置Kerberose
+##### 生成环境变量
+```
+export GUID=`hostname | awk -F"." '{print $2}'`
+export GUID_CAP=`echo ${GUID} | tr 'a-z' 'A-Z'`
+```
+
+##### 创建kerberos配置
+```
+cat << EOF > /etc/krb5.conf.d/ansible.conf
+
+[realms]
+
+ AD1.${GUID_CAP}.EXAMPLE.OPENTLC.COM = {
+
+ kdc = ad1.${GUID}.example.opentlc.com
+ }
+
+[domain_realm]
+ .ad1.${GUID}.example.opentlc.com = AD1.${GUID_CAP}.EXAMPLE.OPENTLC.COM
+EOF
+```
+
+##### 确认kerberos工作正常
+```
+kinit administrator@AD1.${GUID_CAP}.EXAMPLE.OPENTLC.COM
+```
+
+##### 列出Kerberos principle and tickets
+```
+klist
+```
+
+#### 配置OpenSSH on Windows Server
+##### 创建Roles
+```
+mkdir -p roles/win_service_config/{tasks,vars}
+cat << EOF > roles/win_service_config/tasks/main.yml
+---
+- name: Install Windows package
+  win_chocolatey:
+    name: "{{ package_name }}"
+    params: "{{ parameters }}"
+    state: latest
+  when: ansible_distribution == "Microsoft Windows Server 2012 R2 Standard"
+
+- name: Start windows service
+  win_service:
+    name: "{{ service_name }}"
+    state: started
+    start_mode: auto
+  when: ansible_distribution == "Microsoft Windows Server 2012 R2 Standard"
+
+- name: Add win_firewall_rule
+  win_firewall_rule:
+    name: "{{ service_name }}"
+    localport: "{{ local_port }}"
+    action: allow
+    direction: in
+    protocol: "{{ protocol_name }}"
+    state: present
+    enabled: yes
+EOF
+```
+
+##### 创建Playbook vars
+```
+cat << EOF > ssh_var.yml
+package_name: openssh
+parameters: /SSHServerFeature
+service_name: SSHD
+local_port: 22
+protocol_name: tcp
+EOF
+```
+
+##### 创建Playbook
+```
+cat << EOF > win_ssh_server.yml
+- hosts: windows
+  vars_files:
+    - ./ssh_var.yml
+  roles:
+    - win_service_config
+EOF
+```
+
+##### 执行Playbook
+```
+ansible-playbook win_ssh_server.yml
+```
+
+#### 创建Windows AD Users/Groups
+##### 创建vars
+```
+cat << EOF > roles/win_ad_user/defaults/main.yml
+# vars file for roles/win_ad_user
+user_info:
+  - { name: 'james', firstname: 'James', surname: 'Jockey', password: 'redhat@123', group_name: 'dev', group_scope: 'domainlocal'}
+  - { name: 'bill', firstname: 'Bill', surname: 'Gates', password: 'redhat@123', group_name: 'dev', group_scope: 'domainlocal'}
+  - { name: 'mickey', firstname: 'Mickey', surname: 'Mouse', password: 'redhat@123', group_name: 'qa', group_scope: 'domainlocal'}
+  - { name: 'donald', firstname: 'Donald', surname: 'Duck', password: 'redhat@123', group_name: 'qa', group_scope: 'domainlocal'}
+EOF
+```
+
+##### 创建
+
+
 
 ### Memo
 |hostname|ipaddr|

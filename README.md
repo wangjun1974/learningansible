@@ -4,10 +4,12 @@ Learning Ansible
 ### 课程链接 
 https://learning.redhat.com/course/view.php?id=1042
 
-### Day1
+### Style Guide
 Ansible Best Practise Style Guide
 可以参考<br>
-https://github.com/openshift/openshift-ansible/blob/master/docs/style_guide.adoc<br>
+https://github.com/openshift/openshift-ansible/blob/master/docs/style_guide.adoc
+
+### Day1
 
 ansible inventory
 special group (all, ungrouped)

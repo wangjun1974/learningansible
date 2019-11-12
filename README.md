@@ -296,7 +296,9 @@ Decrypt: ansible-vault decrypt secret.yml
 --vault-password-file
 ```
 例子<br>
-https://www.digitalocean.com/community/tutorials/how-to-use-vault-to-protect-sensitive-ansible-data-on-ubuntu-16-04
+https://www.digitalocean.com/community/tutorials/how-to-use-vault-to-protect-sensitive-ansible-data-on-ubuntu-16-04<br>
+https://schoolofdevops.github.io/ultimate-ansible-bootcamp/ansible-vault/
+
 
 ### Memo
 |hostname|ipaddr|

@@ -1192,6 +1192,9 @@ EOF
 #### Lab 3.3
 
 ##### 为Ansible Tower准备HA PostgreSQL
+PostgreSQL灾备切换
+https://severalnines.com/database-blog/postgresql-replication-disaster-recovery
+
 
 在Ansible Tower bastion, 编辑support1服务器上的postgresql.conf
 ```

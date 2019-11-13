@@ -1196,6 +1196,12 @@ PostgreSQL灾备切换<br>
 参见：
 https://severalnines.com/database-blog/postgresql-replication-disaster-recovery<br>
 
+这篇文章详细介绍了以下话题：
+* 如何设置数据库复制
+* 如何定期同步WAL到备份服务器
+* 如何定期备份到备份服务器
+* 恢复时如何用WAL和选定的数据定期备份恢复数据库
+* 恢复后重建数据库复制，WAL备份和数据库定期备份
 
 在Ansible Tower bastion, 编辑support1服务器上的postgresql.conf
 ```

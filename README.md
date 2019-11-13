@@ -1069,3 +1069,7 @@ kinit mickey@AD1.${GUID_CAP}.EXAMPLE.OPENTLC.COM
 ```
 ssh mickey@ad1.${GUID}.example.opentlc.com
 ```
+
+
+### Day3
+

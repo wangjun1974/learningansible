@@ -1073,3 +1073,399 @@ ssh mickey@ad1.${GUID}.example.opentlc.com
 
 ### Day3
 
+#### Labs 3.1
+
+##### 下载并解包最新版ansible-tower
+```
+ansible localhost -m unarchive -a "src=https://releases.ansible.com/ansible-tower/setup/ansible-tower-setup-latest.tar.gz dest=/root/ remote_src=yes"
+```
+
+##### 生成inventory文件 
+```
+cat > /root/ansible-tower-setup-*/inventory << EOF
+[tower]
+tower1.d7da.internal
+tower2.d7da.internal
+tower3.d7da.internal
+
+[database]
+support1.d7da.internal
+
+[all:vars]
+ansible_become=true                  #### 执行时切换为root
+admin_password='redhat123'
+
+pg_host='support1.d7da.internal'
+pg_port='5432'
+pg_database='awx'
+pg_username='awx'
+pg_password='redhat123'
+
+rabbitmq_port=5672
+rabbitmq_vhost=tower
+rabbitmq_username=tower
+rabbitmq_password='redhat123'
+rabbitmq_cookie=cookiemonster
+rabbitmq_use_long_name=true          #### RabbitMQ使用FQDN
+EOF
+```
+
+#### 执行ansible tower安装
+```
+/root/ansible-tower-setup-*/setup.sh
+```
+
+#### 访问Tower界面
+
+##### Labs 3.2
+
+https://www.ansible.com/blog/ansible-tower-feature-spotlight-instance-groups-and-isolated-nodes
+
+安装带isolation group的Ansible Tower，把bastion设置为isolated_group_ThreeTierApp的member
+
+在Three Tier APPs bastion
+```
+wget http://www.opentlc.com/download/ansible_bootcamp/openstack_keys/openstack.pub
+cat openstack.pub  >> /home/ec2-user/.ssh/authorized_keys
+```
+
+在Ansible Tower bastion
+```
+export APP_GUID="ada0"
+ansible all -i bastion.${APP_GUID}.example.opentlc.com, --private-key=~/.ssh/openstack.pem -u ec2-user -m ping
+```
+
+
+```
+export GUID="d7da"
+export APP_GUID="ada0"
+
+cat << EOF > /root/ansible-tower-setup-*/inventory
+[tower]
+tower1.${GUID}.internal
+tower2.${GUID}.internal
+tower3.${GUID}.internal
+[database]
+support1.${GUID}.internal
+[isolated_group_ThreeTierApp]
+bastion.${APP_GUID}.example.opentlc.com ansible_user='ec2-user' ansible_ssh_private_key_file='~/.ssh/openstack.pem'
+[isolated_group_ThreeTierApp:vars]
+controller=tower
+[all:vars]
+ansible_become=true
+admin_password='redhat123'
+pg_host='support1.${GUID}.internal'
+pg_port='5432'
+pg_database='awx'
+pg_username='awx'
+pg_password='redhat123'
+rabbitmq_port=5672
+rabbitmq_vhost=tower
+rabbitmq_username=tower
+rabbitmq_password='redhat123'
+rabbitmq_cookie=cookiemonster
+rabbitmq_use_long_name=true
+EOF
+```
+
+执行安装
+```
+/root/ansible-tower-setup-*/setup.sh
+```
+
+在Three Tier bastion
+```
+export APP_GUID="ada0"
+cat << EOF > ./inventory/hosts
+[frontends]
+frontend1.${APP_GUID}.internal ansible_ssh_host=frontend1.${APP_GUID}.example.opentlc.com
+
+[apps]
+app1.${APP_GUID}.internal ansible_ssh_host=app1.${APP_GUID}.example.opentlc.com
+app2.${APP_GUID}.internal ansible_ssh_host=app2.${APP_GUID}.example.opentlc.com
+
+[appdbs]
+appdb1.${APP_GUID}.internal ansible_ssh_host=appdb1.${APP_GUID}.example.opentlc.com
+EOF
+``` 
+
+#### Lab 3.3
+
+##### 为Ansible Tower准备HA PostgreSQL
+
+在Ansible Tower bastion, 编辑support1服务器上的postgresql.conf
+```
+ansible support1.${GUID}.internal -m lineinfile -a "line='include_dir = 'conf.d'' path=/var/lib/pgsql/9.6/data/postgresql.conf"
+```
+
+创建目录/var/lib/pgsql/9.6/data/conf.d
+```
+ansible support1.${GUID}.internal -m file -a 'path=/var/lib/pgsql/9.6/data/conf.d state=directory'
+```
+
+创建并拷贝文件
+https://scalegrid.io/blog/getting-started-with-postgresql-streaming-replication/
+
+```
+cat << EOF > tower-postgresql.conf
+wal_level = hot_standby
+synchronous_commit = local
+archive_mode = on
+archive_command = 'cp %p /var/lib/pgsql/9.6/data/archive/%f'
+max_wal_senders = 2
+wal_keep_segments = 10
+synchronous_standby_names = 'awx'
+EOF
+
+ansible support1.${GUID}.internal -m copy -a "src=/root/tower-postgresql.conf dest=/var/lib/pgsql/9.6/data/conf.d/tower-postgresql.conf"
+```
+
+创建复制用户
+https://stackoverflow.com/questions/17429040/creating-user-with-encrypted-password-in-postgresql
+
+```
+psql
+# CREATE USER replica LOGIN REPLICATION PASSWORD ’redhat123’;
+```
+
+配置数据库服务器接受复制服务器连接
+https://www.postgresql.org/docs/9.1/auth-pg-hba-conf.html
+```
+ansible support1.${GUID}.internal  -m lineinfile -a "line='host    replication replica     0.0.0.0/0        md5' path=/var/lib/pgsql/9.6/data/pg_hba.conf"
+```
+
+重启数据库服务器
+```
+ansible support1.${GUID}.internal -m service -a"name=postgresql-9.6 state=restarted"
+```
+
+##### 准备复制数据库服务器
+在第二台数据库服务器上配置repo和repo key
+```
+ansible support2.${GUID}.internal -m get_url -a "url=http://www.opentlc.com/download/ansible_bootcamp/repo/pgdg-96-centos.repo dest=/etc/yum.repos.d/pgdg-96-centos.repo"
+ansible support2.${GUID}.internal -m get_url -a "url=http://www.opentlc.com/download/ansible_bootcamp/repo/RPM-GPG-KEY-PGDG-96 dest=/etc/pki/rpm-gpg/RPM-GPG-KEY-PGDG-96"
+```
+
+在第二台数据库服务器上安装postgresql96-server
+```
+ansible support2.${GUID}.internal -m yum -a "name=postgresql96-server state=present"
+```
+
+在第二台数据库服务器上复制数据
+```
+ansible support2.${GUID}.internal -m shell -a "export PGPASSWORD=redhat123 && pg_basebackup -h support1.${GUID}.internal -U replica -D /var/lib/pgsql/9.6/data/ -P --xlog" --become-user=postgres
+```
+
+修改第二台数据库服务器的/var/lib/pgsql/9.6/data/postgresql.conf，设置hot_standby为on
+```
+ansible support2.${GUID}.internal -m lineinfile -a "line='hot_standby = on' path=/var/lib/pgsql/9.6/data/postgresql.conf"
+```
+
+拷贝recovery.conf文件到第二台数据库服务器上
+```
+cat << EOF > recovery.conf
+restore_command = 'scp support1.${GUID}.internal:/var/lib/pgsql/9.6/data/archive/%f %p'
+standby_mode = on
+primary_conninfo = 'host=support1.${GUID}.internal port=5432 user=replica password=redhat123 application_name=awx'
+EOF
+
+ansible support2.${GUID}.internal -m copy -a "src=/root/recovery.conf dest=/var/lib/pgsql/9.6/data/recovery.conf"
+```
+
+启用并启动第二台数据库服务器的postgresql-9.6服务
+```
+ansible support2.${GUID}.internal -m service -a "name=postgresql-9.6 state=started enabled=true"
+```
+
+##### 用Sam Doran Role 配置 Replication
+
+在bastion节点上
+```
+cd /root/ansible-tower-setup-*
+ansible-galaxy install samdoran.pgsql_replication -p roles
+```
+
+修改roles/samdoran.pgsql_replication/tasks/master.yml文件的Task 'Add trust in pg_hba.conf'，重新定义pgsqlrep_replica_address变量
+```
+loop: "{{ pgsqlrep_replica_address }}"
+vars:
+  pgsqlrep_replica_address: "{{ groups[pgsqlrep_group_name] | map('extract', hostvars, 'ansible_all_ipv4_addresses') | flatten }}"
+notify: restart postgresql
+```
+
+生成inventory
+```
+cat << EOF > pg_inventory
+[tower]
+tower1.d7da.internal
+tower2.d7da.internal
+tower3.d7da.internal
+[database]
+support1.d7da.internal pgsqlrep_role=master
+
+[database_replica]
+support2.d7da.internal pgsqlrep_role=replica
+EOF
+```
+
+创建新playbook
+```
+cat > pgsql_replication.yml << 'EOF'
+- name: Configure PostgreSQL streaming replication
+  hosts: database_replica
+
+  tasks:
+    - name: Find recovery.conf
+      find:
+        paths: /var/lib/pgsql
+        recurse: yes
+        patterns: recovery.conf
+      register: recovery_conf_path
+
+    - name: Remove recovery.conf
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ recovery_conf_path.files }}"
+
+    - name: Add replica to database group
+      add_host:
+        name: "{{ inventory_hostname }}"
+        groups: database
+      tags:
+        - always
+
+    - import_role:
+        name: nginx
+      vars:
+        nginx_exec_vars_only: yes
+
+    - import_role:
+        name: repos_el
+      when: ansible_os_family == "RedHat"
+
+    - import_role:
+        name: packages_el
+      vars:
+        packages_el_install_tower: no
+        packages_el_install_postgres: yes
+      when: ansible_os_family == "RedHat"
+
+    - import_role:
+        name: postgres
+      vars:
+        postgres_allowed_ipv4: "0.0.0.0/0"
+        postgres_allowed_ipv6: "::/0"
+        postgres_username: "{{ pg_username }}"
+        postgres_password: "{{ pg_password }}"
+        postgres_database: "{{ pg_database }}"
+        max_postgres_connections: 1024
+        postgres_shared_memory_size: "{{ (ansible_memtotal_mb*0.3)|int }}"
+        postgres_work_mem: "{{ (ansible_memtotal_mb*0.03)|int }}"
+        postgres_maintenance_work_mem: "{{ (ansible_memtotal_mb*0.04)|int }}"
+      tags:
+        - postgresql_database
+
+    - import_role:
+        name: firewall
+      vars:
+        firewalld_http_port: "{{ nginx_http_port }}"
+        firewalld_https_port: "{{ nginx_https_port }}"
+      tags:
+        - firewall
+      when: ansible_os_family == 'RedHat'
+
+- name: Configure PSQL master server
+  hosts: database[0]
+
+  vars:
+    pgsqlrep_master_address: "{{ hostvars[groups[pgsqlrep_group_name_master][0]].ansible_all_ipv4_addresses[-1] }}"
+    pgsqlrep_replica_address: "{{ hostvars[groups[pgsqlrep_group_name][0]].ansible_all_ipv4_addresses[-1] }}"
+
+  tasks:
+    - import_role:
+        name: samdoran.pgsql_replication
+
+- name: Configure PSQL replica
+  hosts: database_replica
+
+  vars:
+    pgsqlrep_master_address: "{{ hostvars[groups[pgsqlrep_group_name_master][0]].ansible_all_ipv4_addresses[-1] }}"
+    pgsqlrep_replica_address: "{{ hostvars[groups[pgsqlrep_group_name][0]].ansible_all_ipv4_addresses[-1] }}"
+
+  tasks:
+    - import_role:
+        name: samdoran.pgsql_replication
+EOF
+```
+
+执行playbook
+```
+ansible-playbook -b -i pg_inventory pgsql_replication.yml -e pgsqlrep_password=redhat123 -e pg_username='awx' -e pg_database='awx' -e pg_password='redhat123'
+```
+
+检查复制
+```
+ansible support1.${GUID}.internal -m shell -a "psql -c 'select application_name, state, sync_priority, sync_state from pg_stat_replication;'" --become-user postgres
+```
+
+https://www.tutorialdba.com/2017/09/postgresql-replication-sync-to-async.html
+
+https://pgdash.io/blog/monitoring-postgres-replication.html
+
+##### 切换
+
+生成切换Playbook
+```
+cat << 'EOF' > postgres_failover.yml
+- name: Gather facts
+  hosts: all
+  become: yes
+
+- name: Failover PostgreSQL
+  hosts: database_replica
+  become: yes
+
+  tasks:
+    - name: Get the current PostgreSQL Version
+      import_role:
+        name: samdoran.pgsql_replication
+        tasks_from: pgsql_version.yml
+
+    - name: Promote secondary PostgreSQL server to primary
+      command: /usr/pgsql-{{ pgsql_version }}/bin/pg_ctl promote
+      become_user: postgres
+      environment:
+        PGDATA: /var/lib/pgsql/{{ pgsql_version }}/data
+      ignore_errors: yes
+
+- name: Update Ansible Tower database configuration
+  hosts: tower
+  become: yes
+
+  tasks:
+    - name: Update Tower postgres.py
+      lineinfile:
+        dest: /etc/tower/conf.d/postgres.py
+        regexp: "^(.*'HOST':)"
+        line: "\\1 '{{ hostvars[groups['database_replica'][0]].ansible_default_ipv4.address }}',"
+        backrefs: yes
+      notify: restart tower
+
+  handlers:
+    - name: restart tower
+      command: ansible-tower-service restart
+EOF
+```
+
+关闭当前primary数据库服务器
+```
+ansible support1.$GUID.internal -m shell -a 'shutdown -h now'
+```
+
+切换数据库
+```
+ansible-playbook -b -i pg_inventory postgres_failover.yml -e pgsqlrep_password=r3dh4t1!
+```
+
+检查tower是否工作正常，访问https://tower1.d7da.example.opentlc.com/

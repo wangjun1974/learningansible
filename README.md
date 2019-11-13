@@ -1195,7 +1195,6 @@ EOF
 PostgreSQL灾备切换<br>
 参见：
 https://severalnines.com/database-blog/postgresql-replication-disaster-recovery<br>
-https://scalegrid.io/blog/getting-started-with-postgresql-streaming-replication/<br>
 
 
 在Ansible Tower bastion, 编辑support1服务器上的postgresql.conf
@@ -1209,6 +1208,7 @@ ansible support1.${GUID}.internal -m file -a 'path=/var/lib/pgsql/9.6/data/conf.
 ```
 
 创建并拷贝文件
+https://scalegrid.io/blog/getting-started-with-postgresql-streaming-replication/
 ```
 cat << EOF > tower-postgresql.conf
 wal_level = hot_standby

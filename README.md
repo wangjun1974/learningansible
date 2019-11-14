@@ -1497,3 +1497,8 @@ ansible-playbook -b -i pg_inventory postgres_failover.yml -e pgsqlrep_password=r
 
 ### Day 4
 
+Instance Group
+Isolated Nodes
+
+Job Slicing
+https://docs.ansible.com/ansible-tower/latest/html/userguide/job_slices.html

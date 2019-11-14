@@ -1482,7 +1482,7 @@ ansible-playbook -b -i pg_inventory postgres_failover.yml -e pgsqlrep_password=r
 
 检查tower是否工作正常，访问https://tower1.d7da.example.opentlc.com/
 
-衍生话题：数据库复制及备份恢复手段
+衍生话题：数据库复制及备份恢复手段可以参考https://severalnines.com/database-blog/postgresql-replication-disaster-recovery，这个链接有比较详细的介绍。
 
 ### Day 4
 

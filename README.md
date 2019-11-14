@@ -22,6 +22,7 @@ https://github.com/redhat-cop/ansible-middleware-playbooks
 |---|---|
 |Advanced Ansible Tower|bastion.d7da.example.opentlc.com|
 |Three Tier Apps|bastion.ada0.example.opentlc.com|
+|Ansible Advanced - OpenStack|workstation-cbfb.rhpds.opentlc.com|
 
 ansible inventory
 special group (all, ungrouped)

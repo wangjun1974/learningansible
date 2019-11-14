@@ -1503,4 +1503,4 @@ Isolated Nodes
 Job Slicing
 https://docs.ansible.com/ansible-tower/latest/html/userguide/job_slices.html
 
-[Job Slicing](pics/jobslicing.png)
+![Job Slicing](pics/jobslicing.png)

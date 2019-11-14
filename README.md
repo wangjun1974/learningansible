@@ -16,6 +16,13 @@ https://github.com/redhat-cop/ansible-middleware-playbooks
 
 ### Day1
 
+#### Environment
+
+|Lab|hostname|
+|---|---|
+|Advanced Ansible Tower|bastion.d7da.example.opentlc.com|
+|Three Tier Apps|bastion.ada0.example.opentlc.com|
+
 ansible inventory
 special group (all, ungrouped)
 ansible-inventory -i <inventory> --graph
@@ -1075,6 +1082,9 @@ ssh mickey@ad1.${GUID}.example.opentlc.com
 
 How To Utilize The FORKS Setting In Ansible Tower Job Template?<br>
 https://access.redhat.com/solutions/3486521
+
+Ansible Tower安装场景例子<br>
+https://docs.ansible.com/ansible-tower/latest/html/installandreference/tower_install_wizard.html
 
 #### Labs 3.1
 

@@ -1073,6 +1073,9 @@ ssh mickey@ad1.${GUID}.example.opentlc.com
 
 ### Day3
 
+How To Utilize The FORKS Setting In Ansible Tower Job Template?<br>
+https://access.redhat.com/solutions/3486521
+
 #### Labs 3.1
 
 ##### 下载并解包最新版ansible-tower
@@ -1478,3 +1481,8 @@ ansible-playbook -b -i pg_inventory postgres_failover.yml -e pgsqlrep_password=r
 ```
 
 检查tower是否工作正常，访问https://tower1.d7da.example.opentlc.com/
+
+衍生话题：数据库复制及备份恢复手段
+
+### Day 4
+

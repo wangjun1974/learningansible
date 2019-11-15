@@ -1647,7 +1647,40 @@ https://medium.com/happy5/aws-dynamic-inventory-and-ansible-thank-god-i-can-slee
 
 #### Jump Host
 
-##### SSH Proxy
+##### SSH Proxy 例子
+```
+Host workstation
+  Hostname workstation-${GUID}.rhpds.opentlc.com
+  User cloud-user
+
+ Host 10.10.10.* 192.168.0.* *.rhpds.opentlc.com
+  ProxyJump workstation
+  User cloud-user
+
+Match User cloud-user
+  IdentityFile ~/.ssh/openstack.pem
+
+Host *
+  ForwardAgent yes
+  ControlMaster auto
+  ControlPath /tmp/%h-%r
+  ControlPersist 5m
+  StrictHostKeyChecking no
+```
+
+##### Ansible Use SSH Proxy ansible.cfg 例子
+```
+[defaults]
+inventory                   = ./osp_jumpbox_inventory
+
+[privilege_escalation]
+become                      = True
+become_method               = sudo
+
+[ssh_connection]
+ssh_args                    = -F ./ssh.cfg
+host_key_checking           = False
+```
 
 #### Homework
 
@@ -1658,5 +1691,7 @@ https://medium.com/happy5/aws-dynamic-inventory-and-ansible-thank-god-i-can-slee
 |Ansible Advanced - OpenStack|workstation-c83d.rhpds.opentlc.com|
 
 
+##### Assignment
 
+![Ansible Tower Home Assignments](pics/assignment.png)
 

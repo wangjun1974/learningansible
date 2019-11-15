@@ -3,6 +3,7 @@ Learning Ansible
 
 ### 课程链接 
 https://learning.redhat.com/course/view.php?id=1042
+https://github.com/miteshrh
 
 ### Style Guide
 Ansible Best Practise Style Guide
@@ -1498,9 +1499,164 @@ ansible-playbook -b -i pg_inventory postgres_failover.yml -e pgsqlrep_password=r
 ### Day 4
 
 Instance Group
+
 Isolated Nodes
 
 Job Slicing
 https://docs.ansible.com/ansible-tower/latest/html/userguide/job_slices.html
 
 ![Job Slicing](pics/jobslicing.png)
+
+#### Labs 1  - Cloud Infrastructure Lab
+
+##### 目标： Create playbooks and roles to deploy infrastructure and provision instances on Red Hat® OpenStack® Platform
+
+##### 
+
+```
+export GUID=cbfb
+cat << EOF >> ssh.cfg
+Host workstation
+  Hostname workstation-${GUID}.rhpds.opentlc.com
+  User cloud-user
+
+ Host 10.10.10.* 192.168.0.* *.rhpds.opentlc.com
+  ProxyJump workstation
+  User cloud-user
+
+Match User cloud-user
+  IdentityFile ~/.ssh/openstack.pem
+
+Host *
+  ForwardAgent yes
+  ControlMaster auto
+  ControlPath /tmp/%h-%r
+  ControlPersist 5m
+  StrictHostKeyChecking no
+EOF
+```
+
+```
+cat << EOF > ansible.cfg
+[defaults]
+inventory                   = ./osp_jumpbox_inventory
+
+[privilege_escalation]
+become                      = True
+become_method               = sudo
+
+[ssh_connection]
+ssh_args                    = -F ./ssh.cfg
+host_key_checking           = False
+EOF
+```
+
+```
+cat << EOF > osp_jumpbox_inventory
+[jumpbox]
+workstation
+EOF
+```
+
+```
+ansible -i osp_jumpbox_inventory all -m ping
+```
+
+```
+ansible -i osp_jumpbox_inventory jumpbox -m os_user_facts -a cloud=ospcloud
+```
+
+```
+cat << EOF > osp_image.yml
+- hosts: jumpbox
+  become: yes
+  gather_facts: false
+  tasks:
+  - name: Download RHEL image
+    get_url:
+      url: http://www.opentlc.com/download/osp_advanced_networking/rhel-guest-image-7.2-20151102.0.x86_64.qcow2
+      dest: /root/rhel-guest-image-7.2-20151102.0.x86_64.qcow2
+  - name: Load RHEL image into Glance
+    os_image:
+      cloud: ospcloud
+      name: rhel-guest
+      container_format: bare
+      disk_format: qcow2
+      state: present
+      filename: /root/rhel-guest-image-7.2-20151102.0.x86_64.qcow2
+EOF
+
+ansible-playbook osp_image.yml
+```
+
+#### Labs 5.2 - Isolated Node Installation Lab
+```
+export OSP_GUID=cbfb
+```
+
+```
+[tower]
+tower1.d7da.internal
+tower2.d7da.internal
+tower3.d7da.internal
+[database]
+support1.d7da.internal
+[isolated_group_ThreeTierApp]
+bastion.ada0.example.opentlc.com ansible_user='ec2-user' ansible_ssh_private_key_file='~/.ssh/openstack.pem'
+[isolated_group_ThreeTierApp:vars]
+controller=tower
+[isolated_group_osp]
+workstation-cbfb.rhpds.opentlc.com ansible_user='cloud-user' ansible_ssh_private_key_file='~/.ssh/openstack.pem'
+[isolated_group_osp:vars]
+controller=tower
+[all:vars]
+ansible_become=true
+admin_password='redhat123'
+pg_host='support1.d7da.internal'
+pg_port='5432'
+pg_database='awx'
+pg_username='awx'
+pg_password='redhat123'
+rabbitmq_port=5672
+rabbitmq_vhost=tower
+rabbitmq_username=tower
+rabbitmq_password='redhat123'
+rabbitmq_cookie=cookiemonster
+rabbitmq_use_long_name=true
+```
+
+#### Dynamic Inventory
+
+Using Ansible Validations With Red Hat OpenStack Platform - Part 1<br>
+https://www.redhat.com/en/blog/using-ansible-validations-red-hat-openstack-platform-part-1
+
+Ansible Dynamic Inventory - VMware<br>
+https://docs.ansible.com/ansible/latest/scenario_guides/vmware_scenarios/vmware_inventory.html<br>
+https://serverfault.com/questions/829201/is-there-a-dynamic-inventory-for-vmware-in-ansible<br>
+https://www.reddit.com/r/ansible/comments/6jvej4/possible_to_use_vmware_inventorypy_dynamic/<br>
+http://vcarbs.com/ansible-tower-vmware-dynamic-discovery/<br>
+
+Working with Dynamic Inventory<br>
+https://docs.ansible.com/ansible/latest/user_guide/intro_dynamic_inventory.html
+
+Ansible Dynamic Inventory - AWS<br>
+https://medium.com/happy5/aws-dynamic-inventory-and-ansible-thank-god-i-can-sleep-more-4d2aeadbc6f<br>
+
+
+### Day 5
+
+#### Jump Host
+
+##### SSH Proxy
+
+#### Homework
+
+|Lab|hostname|
+|---|---|
+|Advanced Ansible Tower - Homework|bastion.6fa1.example.opentlc.com|
+|Three Tier Apps|bastion.9adf.example.opentlc.com|
+|Ansible Advanced - OpenStack|workstation-c83d.rhpds.opentlc.com|
+
+
+
+

@@ -22,6 +22,8 @@ https://github.com/redhat-cop/ansible-middleware-playbooks
 ssh -L 8080:192.168.0.20:80 <username>@workstation-cbfb.rhpds.opentlc.com
 ```
 
+![](pics/sshtunnel.png)
+
 ### Day1
 
 #### Environment

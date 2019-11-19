@@ -17,6 +17,8 @@ https://github.com/redhat-cop/ansible-middleware-playbooks
 
 ### Tips
 
+#### ssh 隧道
+
 假设openstack的horizon可以通过http://192.168.0.20/访问，workstation-cbfb.rhpds.opentlc.com是对应的跳板机，以下命令可建立所需SSH隧道，在浏览器访问http://localhost:8080可访问openstack的horizon dashboard
 ```
 ssh -L 8080:192.168.0.20:80 <username>@workstation-cbfb.rhpds.opentlc.com

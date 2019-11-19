@@ -15,6 +15,13 @@ https://github.com/openshift/openshift-ansible/blob/master/docs/style_guide.adoc
 Red Hat Middleware Playbooks<br>
 https://github.com/redhat-cop/ansible-middleware-playbooks
 
+### Tips
+
+假设openstack的horizon可以通过http://192.168.0.20/访问，orkstation-cbfb.rhpds.opentlc.com是对应的跳板机，以下命令可建立所需SSH隧道，在浏览器访问http://localhost:8080可访问openstack的horizon dashboard
+```
+ssh -L 8080:192.168.0.20:80 <username>@workstation-cbfb.rhpds.opentlc.com
+```
+
 ### Day1
 
 #### Environment
@@ -1515,9 +1522,9 @@ https://docs.ansible.com/ansible-tower/latest/html/userguide/job_slices.html
 
 ```
 export GUID=cbfb
-cat << EOF >> ssh.cfg
+cat << EOF > /tmp/ssh.cfg
 Host workstation
-  Hostname workstation-${GUID}.rhpds.opentlc.com
+  Hostname workstation-${OSP_GUID}.rhpds.opentlc.com
   User cloud-user
 
  Host 10.10.10.* 192.168.0.* *.rhpds.opentlc.com
@@ -1649,6 +1656,7 @@ https://medium.com/happy5/aws-dynamic-inventory-and-ansible-thank-god-i-can-slee
 
 ##### SSH Proxy 例子
 ```
+cat > /tmp/ssh.cfg << EOF
 Host workstation
   Hostname workstation-${GUID}.rhpds.opentlc.com
   User cloud-user
@@ -1666,6 +1674,7 @@ Host *
   ControlPath /tmp/%h-%r
   ControlPersist 5m
   StrictHostKeyChecking no
+EOF
 ```
 
 ##### Ansible Use SSH Proxy ansible.cfg 例子
@@ -1694,4 +1703,59 @@ host_key_checking           = False
 ##### Assignment
 
 ![Ansible Tower Home Assignments](pics/assignment.png)
+
+```
+ tower-cli inventory_source create -n "{{ec2_inventory_source}}" --inventory "{{ec2_dynamic_
+inventory}}" --source ec2 --credential "{{aws_read_keys}}" --source-regions "{{aws_region_name}}" --instance-filters "{{tag_filters}}" -
+-overwrite yes --update-on-launch yes
+
+
+OSP_GUID=c83d
+
+ssh -i /root/.ssh/mykey.pem jwang-redhat.com@workstation-${OSP_GUID}.rhpds.opentlc.com
+
+export TOWER_GUID=6fa1
+export OSP_GUID=c83d
+export OPENTLC_LOGIN=jwang-redhat.com
+export OPENTLC_PASSWORD=Sus#l1nux
+export GITHUB_REPO=https://github.com/wangjun1974/ansible_advance_homework
+export JQ_REPO_BASE=http://www.opentlc.com/download/ansible_bootcamp
+export REGION=us-east-1
+export RH_MAIL_ID=jwang
+
+
+cat << EOF > /tmp/ansible.cfg
+[defaults]
+inventory                   = /tmp/hosts
+
+[privilege_escalation]
+become                      = True
+become_method               = sudo
+
+[ssh_connection]
+ssh_args                    = -F /tmp/ssh.cfg
+host_key_checking           = False
+EOF
+
+cat << EOF > /tmp/ssh.cfg 
+Host workstation
+  Hostname workstation-c83d.rhpds.opentlc.com
+  User cloud-user
+
+ Host 10.10.10.* 192.168.0.* *.rhpds.opentlc.com
+  ProxyJump workstation
+  User cloud-user
+
+Match User cloud-user
+  IdentityFile ~/.ssh/openstack.pem
+
+Host *
+  ForwardAgent yes
+  ControlMaster auto
+  ControlPath /tmp/%h-%r
+  ControlPersist 5m
+  StrictHostKeyChecking no
+EOF
+
+```
 

@@ -29,6 +29,8 @@ ssh -R 1234:remote:8000
 
 ![](pics/sshtunnel.png)
 
+摘自：https://lotabout.me/2019/SSH-Port-Forwarding/
+
 ### Day1
 
 #### Environment

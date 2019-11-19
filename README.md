@@ -22,6 +22,11 @@ https://github.com/redhat-cop/ansible-middleware-playbooks
 ssh -L 8080:192.168.0.20:80 <username>@workstation-cbfb.rhpds.opentlc.com
 ```
 
+访问localhost的1234端口，将通过本地与server ip_a之间的隧道，转发到远程主机remote的8000端口上<br>
+```
+ssh -R 1234:remote:8000
+```
+
 ![](pics/sshtunnel.png)
 
 ### Day1
